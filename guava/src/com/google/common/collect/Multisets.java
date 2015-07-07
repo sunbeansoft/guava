@@ -45,13 +45,13 @@ import javax.annotation.Nullable;
  * Multiset} instances.
  *
  * <p>See the Guava User Guide article on <a href=
- * "http://code.google.com/p/guava-libraries/wiki/CollectionUtilitiesExplained#Multisets">
+ * "https://github.com/google/guava/wiki/CollectionUtilitiesExplained#multisets">
  * {@code Multisets}</a>.
  *
  * @author Kevin Bourrillion
  * @author Mike Bostock
  * @author Louis Wasserman
- * @since 2.0 (imported from Google Collections Library)
+ * @since 2.0
  */
 @GwtCompatible
 public final class Multisets {

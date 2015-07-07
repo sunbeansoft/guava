@@ -31,9 +31,8 @@ import java.util.NoSuchElementException;
 import javax.annotation.Nullable;
 
 /**
- * An immutable implementation of {@code RangeMap}, supporting all query operations efficiently.
- *
- * <p>Like all {@code RangeMap} implementations, this supports neither null keys nor null values.
+ * A {@link RangeMap} whose contents will never change, with many other important properties
+ * detailed at {@link ImmutableCollection}.
  *
  * @author Louis Wasserman
  * @since 14.0
@@ -57,8 +56,7 @@ public class ImmutableRangeMap<K extends Comparable<?>, V> implements RangeMap<K
   /**
    * Returns an immutable range map mapping a single range to a single value.
    */
-  public static <K extends Comparable<?>, V> ImmutableRangeMap<K, V> of(
-      Range<K> range, V value) {
+  public static <K extends Comparable<?>, V> ImmutableRangeMap<K, V> of(Range<K> range, V value) {
     return new ImmutableRangeMap<K, V>(ImmutableList.of(range), ImmutableList.of(value));
   }
 
@@ -163,8 +161,12 @@ public class ImmutableRangeMap<K extends Comparable<?>, V> implements RangeMap<K
   @Override
   @Nullable
   public V get(K key) {
-    int index = SortedLists.binarySearch(ranges, Range.<K>lowerBoundFn(),
-        Cut.belowValue(key), KeyPresentBehavior.ANY_PRESENT, KeyAbsentBehavior.NEXT_LOWER);
+    int index = SortedLists.binarySearch(
+        ranges,
+        Range.<K>lowerBoundFn(),
+        Cut.belowValue(key),
+        KeyPresentBehavior.ANY_PRESENT,
+        KeyAbsentBehavior.NEXT_LOWER);
     if (index == -1) {
       return null;
     } else {
@@ -176,8 +178,12 @@ public class ImmutableRangeMap<K extends Comparable<?>, V> implements RangeMap<K
   @Override
   @Nullable
   public Map.Entry<Range<K>, V> getEntry(K key) {
-    int index = SortedLists.binarySearch(ranges, Range.<K>lowerBoundFn(),
-        Cut.belowValue(key), KeyPresentBehavior.ANY_PRESENT, KeyAbsentBehavior.NEXT_LOWER);
+    int index = SortedLists.binarySearch(
+        ranges,
+        Range.<K>lowerBoundFn(),
+        Cut.belowValue(key),
+        KeyPresentBehavior.ANY_PRESENT,
+        KeyAbsentBehavior.NEXT_LOWER);
     if (index == -1) {
       return null;
     } else {
@@ -223,9 +229,20 @@ public class ImmutableRangeMap<K extends Comparable<?>, V> implements RangeMap<K
     }
     RegularImmutableSortedSet<Range<K>> rangeSet =
         new RegularImmutableSortedSet<Range<K>>(ranges, Range.RANGE_LEX_ORDERING);
-    return new RegularImmutableSortedMap<Range<K>, V>(rangeSet, values);
+    return new ImmutableSortedMap<Range<K>, V>(rangeSet, values);
   }
-  
+
+  @Override
+  public ImmutableMap<Range<K>, V> asDescendingMapOfRanges() {
+    if (ranges.isEmpty()) {
+      return ImmutableMap.of();
+    }
+    RegularImmutableSortedSet<Range<K>> rangeSet =
+        new RegularImmutableSortedSet<Range<K>>(
+            ranges.reverse(), Range.RANGE_LEX_ORDERING.reverse());
+    return new ImmutableSortedMap<Range<K>, V>(rangeSet, values.reverse());
+  }
+
   @Override
   public ImmutableRangeMap<K, V> subRangeMap(final Range<K> range) {
     if (checkNotNull(range).isEmpty()) {
@@ -233,49 +250,57 @@ public class ImmutableRangeMap<K extends Comparable<?>, V> implements RangeMap<K
     } else if (ranges.isEmpty() || range.encloses(span())) {
       return this;
     }
-    int lowerIndex = SortedLists.binarySearch(
-        ranges, Range.<K>upperBoundFn(), range.lowerBound,
-        KeyPresentBehavior.FIRST_AFTER, KeyAbsentBehavior.NEXT_HIGHER);
-    int upperIndex = SortedLists.binarySearch(ranges, 
-        Range.<K>lowerBoundFn(), range.upperBound,
-        KeyPresentBehavior.ANY_PRESENT, KeyAbsentBehavior.NEXT_HIGHER);
+    int lowerIndex =
+        SortedLists.binarySearch(
+            ranges,
+            Range.<K>upperBoundFn(),
+            range.lowerBound,
+            KeyPresentBehavior.FIRST_AFTER,
+            KeyAbsentBehavior.NEXT_HIGHER);
+    int upperIndex =
+        SortedLists.binarySearch(
+            ranges,
+            Range.<K>lowerBoundFn(),
+            range.upperBound,
+            KeyPresentBehavior.ANY_PRESENT,
+            KeyAbsentBehavior.NEXT_HIGHER);
     if (lowerIndex >= upperIndex) {
       return ImmutableRangeMap.of();
     }
     final int off = lowerIndex;
     final int len = upperIndex - lowerIndex;
-    ImmutableList<Range<K>> subRanges = new ImmutableList<Range<K>>() {
-      @Override
-      public int size() {
-        return len;
-      }
-
-      @Override
-      public Range<K> get(int index) {
-        checkElementIndex(index, len);
-        if (index == 0 || index == len - 1) {
-          return ranges.get(index + off).intersection(range);
-        } else {
-          return ranges.get(index + off);
-        }
-      }
-
-      @Override
-      boolean isPartialView() {
-        return true;
-      }
-    };
-    final ImmutableRangeMap<K, V> outer = this;
-    return new ImmutableRangeMap<K, V>(
-        subRanges, values.subList(lowerIndex, upperIndex)) {
+    ImmutableList<Range<K>> subRanges =
+        new ImmutableList<Range<K>>() {
           @Override
-          public ImmutableRangeMap<K, V> subRangeMap(Range<K> subRange) {
-            if (range.isConnected(subRange)) {
-              return outer.subRangeMap(subRange.intersection(range));
+          public int size() {
+            return len;
+          }
+
+          @Override
+          public Range<K> get(int index) {
+            checkElementIndex(index, len);
+            if (index == 0 || index == len - 1) {
+              return ranges.get(index + off).intersection(range);
             } else {
-              return ImmutableRangeMap.of();
+              return ranges.get(index + off);
             }
           }
+
+          @Override
+          boolean isPartialView() {
+            return true;
+          }
+        };
+    final ImmutableRangeMap<K, V> outer = this;
+    return new ImmutableRangeMap<K, V>(subRanges, values.subList(lowerIndex, upperIndex)) {
+      @Override
+      public ImmutableRangeMap<K, V> subRangeMap(Range<K> subRange) {
+        if (range.isConnected(subRange)) {
+          return outer.subRangeMap(subRange.intersection(range));
+        } else {
+          return ImmutableRangeMap.of();
+        }
+      }
     };
   }
 

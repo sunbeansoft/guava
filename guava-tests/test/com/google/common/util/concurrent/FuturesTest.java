@@ -17,6 +17,7 @@
 package com.google.common.util.concurrent;
 
 import static com.google.common.base.Throwables.propagateIfInstanceOf;
+import static com.google.common.collect.Iterables.getOnlyElement;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.util.concurrent.Futures.allAsList;
 import static com.google.common.util.concurrent.Futures.getChecked;
@@ -26,6 +27,8 @@ import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static com.google.common.util.concurrent.Futures.successfulAsList;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
+import static com.google.common.util.concurrent.TestPlatform.clearInterrupt;
+import static com.google.common.util.concurrent.Uninterruptibles.awaitUninterruptibly;
 import static com.google.common.util.concurrent.Uninterruptibles.getUninterruptibly;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -65,6 +68,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -76,26 +80,23 @@ import javax.annotation.Nullable;
  *
  * @author Nishant Thakkar
  */
+@SuppressWarnings("CheckReturnValue")
 @GwtCompatible(emulated = true)
 public class FuturesTest extends TestCase {
-  @GwtIncompatible("TestLogHandler")
-  private static final Logger combinedFutureLogger = Logger.getLogger(
-      AggregateFuture.class.getName());
-  @GwtIncompatible("TestLogHandler")
-  private final TestLogHandler combinedFutureLogHandler = new TestLogHandler();
+  private static final Logger aggregateFutureLogger =
+      Logger.getLogger(AggregateFuture.class.getName());
+  private final TestLogHandler aggregateFutureLogHandler = new TestLogHandler();
 
   private static final String DATA1 = "data";
   private static final String DATA2 = "more data";
   private static final String DATA3 = "most data";
 
-  @GwtIncompatible("TestLogHandler, mocks")
   @Override
   protected void setUp() throws Exception {
     super.setUp();
-    combinedFutureLogger.addHandler(combinedFutureLogHandler);
+    aggregateFutureLogger.addHandler(aggregateFutureLogHandler);
   }
 
-  @GwtIncompatible("TestLogHandler, interruption")
   @Override
   protected void tearDown() throws Exception {
     /*
@@ -104,8 +105,8 @@ public class FuturesTest extends TestCase {
      * (Ideally we would perform interrupts only in threads that we create, but
      * it's hard to imagine that anything will break in practice.)
      */
-    Thread.interrupted();
-    combinedFutureLogger.removeHandler(combinedFutureLogHandler);
+    clearInterrupt();
+    aggregateFutureLogger.removeHandler(aggregateFutureLogHandler);
     super.tearDown();
   }
 
@@ -125,7 +126,6 @@ public class FuturesTest extends TestCase {
     assertSame(DATA2, future2.get(0L, TimeUnit.MILLISECONDS));
   }
 
-  @GwtIncompatible("immediateFailedFuture")
   public void testImmediateFailedFuture() throws Exception {
     Exception exception = new Exception();
     ListenableFuture<String> future =
@@ -140,7 +140,6 @@ public class FuturesTest extends TestCase {
     }
   }
 
-  @GwtIncompatible("immediateFailedFuture")
   public void testImmediateFailedFuture_cancellationException() throws Exception {
     CancellationException exception = new CancellationException();
     ListenableFuture<String> future =
@@ -441,7 +440,7 @@ public class FuturesTest extends TestCase {
     assertTrue(secondary.wasInterrupted());
   }
 
-  @GwtIncompatible("TODO")
+  @GwtIncompatible("newDirectExecutorService")
   public void testTransform_rejectionPropagatesToOutput()
       throws Exception {
     SettableFuture<Foo> input = SettableFuture.create();
@@ -1298,6 +1297,22 @@ public class FuturesTest extends TestCase {
     }
   }
 
+  @GwtIncompatible("newDirectExecutorService")
+  public void testCatchingAsync_rejectionPropagatesToOutput() throws Exception {
+    SettableFuture<String> input = SettableFuture.create();
+    ExecutorService executor = newDirectExecutorService();
+    ListenableFuture<String> transformed =
+        Futures.catching(input, Throwable.class, Functions.toStringFunction(), executor);
+    executor.shutdown();
+    input.setException(new Exception());
+    try {
+      transformed.get(5, TimeUnit.SECONDS);
+      fail();
+    } catch (ExecutionException expected) {
+      assertTrue(expected.getCause() instanceof RejectedExecutionException);
+    }
+  }
+
   private <X extends Throwable> Function<X, Integer> functionReturningOne() {
     return new Function<X, Integer>() {
       @Override
@@ -1428,6 +1443,43 @@ public class FuturesTest extends TestCase {
       fail();
     } catch (CancellationException expected) {
     }
+  }
+
+  @GwtIncompatible("threads")
+
+  public void testTransform_asyncFunction_cancelledBeforeApplyingFunction()
+      throws InterruptedException, ExecutionException {
+    final AtomicBoolean functionCalled = new AtomicBoolean();
+    AsyncFunction<String, Integer> function = new AsyncFunction<String, Integer>() {
+      @Override
+      public ListenableFuture<Integer> apply(String input) throws Exception {
+        functionCalled.set(true);
+        return Futures.immediateFuture(1);
+      }
+    };
+    SettableFuture<String> inputFuture = SettableFuture.create();
+    ExecutorService executor = newSingleThreadExecutor();
+    ListenableFuture<Integer> future = Futures.transform(
+        inputFuture, function, executor);
+
+    // Pause the executor.
+    final CountDownLatch beforeFunction = new CountDownLatch(1);
+    executor.submit(new Runnable() {
+      @Override
+      public void run() {
+        awaitUninterruptibly(beforeFunction);
+      }
+    });
+
+    // Cancel the future after making input available.
+    inputFuture.set("value");
+    future.cancel(false);
+
+    // Unpause the executor.
+    beforeFunction.countDown();
+    executor.awaitTermination(5, TimeUnit.SECONDS);
+
+    assertFalse(functionCalled.get());
   }
 
   public void testTransformAsync_genericsWildcard_AsyncFunction() throws Exception {
@@ -1856,7 +1908,6 @@ public class FuturesTest extends TestCase {
   /**
    * A single non-error failure is not logged because it is reported via the output future.
    */
-  @GwtIncompatible("TestLogHandler")
   @SuppressWarnings("unchecked")
   public void testAllAsList_logging_exception() throws Exception {
     try {
@@ -1865,14 +1916,13 @@ public class FuturesTest extends TestCase {
     } catch (ExecutionException e) {
       assertTrue(e.getCause() instanceof MyException);
       assertEquals("Nothing should be logged", 0,
-          combinedFutureLogHandler.getStoredLogRecords().size());
+          aggregateFutureLogHandler.getStoredLogRecords().size());
     }
   }
 
   /**
    * Ensure that errors are always logged.
    */
-  @GwtIncompatible("TestLogHandler")
   @SuppressWarnings("unchecked")
   public void testAllAsList_logging_error() throws Exception {
     try {
@@ -1880,34 +1930,56 @@ public class FuturesTest extends TestCase {
       fail();
     } catch (ExecutionException e) {
       assertTrue(e.getCause() instanceof MyError);
-      List<LogRecord> logged = combinedFutureLogHandler.getStoredLogRecords();
+      List<LogRecord> logged = aggregateFutureLogHandler.getStoredLogRecords();
       assertEquals(1, logged.size());  // errors are always logged
       assertTrue(logged.get(0).getThrown() instanceof MyError);
     }
   }
 
   /**
-   * All as list will log extra exceptions that occur after failure.
+   * All as list will log extra exceptions that have already occurred.
    */
-  @GwtIncompatible("TestLogHandler")
   @SuppressWarnings("unchecked")
-  public void testAllAsList_logging_multipleExceptions() throws Exception {
+  public void testAllAsList_logging_multipleExceptions_alreadyDone() throws Exception {
     try {
       Futures.allAsList(immediateFailedFuture(new MyException()),
           immediateFailedFuture(new MyException())).get();
       fail();
     } catch (ExecutionException e) {
       assertTrue(e.getCause() instanceof MyException);
-      List<LogRecord> logged = combinedFutureLogHandler.getStoredLogRecords();
+      List<LogRecord> logged = aggregateFutureLogHandler.getStoredLogRecords();
       assertEquals(1, logged.size());  // the second failure is logged
       assertTrue(logged.get(0).getThrown() instanceof MyException);
     }
   }
 
   /**
+   * All as list will log extra exceptions that occur later.
+   */
+  @SuppressWarnings("unchecked")
+  public void testAllAsList_logging_multipleExceptions_doneLater() throws Exception {
+    SettableFuture<Object> future1 = SettableFuture.create();
+    SettableFuture<Object> future2 = SettableFuture.create();
+    SettableFuture<Object> future3 = SettableFuture.create();
+    ListenableFuture<List<Object>> all = Futures.allAsList(future1, future2, future3);
+
+    future1.setException(new MyException());
+    future2.setException(new MyException());
+    future3.setException(new MyException());
+
+    try {
+      all.get();
+    } catch (ExecutionException e) {
+      List<LogRecord> logged = aggregateFutureLogHandler.getStoredLogRecords();
+      assertEquals(2, logged.size());  // failures are the first are logged
+      assertTrue(logged.get(0).getThrown() instanceof MyException);
+      assertTrue(logged.get(1).getThrown() instanceof MyException);
+    }
+  }
+
+  /**
    * The same exception happening on multiple futures should not be logged.
    */
-  @GwtIncompatible("TestLogHandler")
   @SuppressWarnings("unchecked")
   public void testAllAsList_logging_same_exception() throws Exception {
     try {
@@ -1918,14 +1990,69 @@ public class FuturesTest extends TestCase {
     } catch (ExecutionException e) {
       assertTrue(e.getCause() instanceof MyException);
       assertEquals("Nothing should be logged", 0,
-          combinedFutureLogHandler.getStoredLogRecords().size());
+          aggregateFutureLogHandler.getStoredLogRecords().size());
+    }
+  }
+
+  public void testAllAsList_logging_seenExceptionUpdateRace() throws Exception {
+    final MyException sameInstance = new MyException();
+    SettableFuture<Object> firstFuture = SettableFuture.create();
+    final SettableFuture<Object> secondFuture = SettableFuture.create();
+    ListenableFuture<List<Object>> bulkFuture = allAsList(firstFuture, secondFuture);
+
+    bulkFuture.addListener(new Runnable() {
+      @Override
+      public void run() {
+        /*
+         * firstFuture just completed, but AggregateFuture hasn't yet had time to record the
+         * exception in seenExceptions. When we complete secondFuture with the same exception,
+         * we want for AggregateFuture to still detect that it's been previously seen.
+         */
+        secondFuture.setException(sameInstance);
+      }
+    }, directExecutor());
+    firstFuture.setException(sameInstance);
+
+    try {
+      bulkFuture.get();
+      fail();
+    } catch (ExecutionException expected) {
+      assertTrue(expected.getCause() instanceof MyException);
+      assertThat(aggregateFutureLogHandler.getStoredLogRecords()).isEmpty();
+    }
+  }
+
+  public void testAllAsList_logging_seenExceptionUpdateCancelRace() throws Exception {
+    final MyException subsequentFailure = new MyException();
+    SettableFuture<Object> firstFuture = SettableFuture.create();
+    final SettableFuture<Object> secondFuture = SettableFuture.create();
+    ListenableFuture<List<Object>> bulkFuture = allAsList(firstFuture, secondFuture);
+
+    bulkFuture.addListener(new Runnable() {
+      @Override
+      public void run() {
+        /*
+         * This is similar to the above test, but this time we're making sure that we recognize that
+         * the output Future is done early not because of an exception but because of a
+         * cancellation.
+         */
+        secondFuture.setException(subsequentFailure);
+      }
+    }, directExecutor());
+    firstFuture.cancel(false);
+
+    try {
+      bulkFuture.get();
+      fail();
+    } catch (CancellationException expected) {
+      assertThat(getOnlyElement(aggregateFutureLogHandler.getStoredLogRecords()).getThrown())
+          .isSameAs(subsequentFailure);
     }
   }
 
   /**
    * Different exceptions happening on multiple futures with the same cause should not be logged.
    */
-  @GwtIncompatible("TestLogHandler")
   @SuppressWarnings("unchecked")
   public void testAllAsList_logging_same_cause() throws Exception {
     try {
@@ -1943,7 +2070,7 @@ public class FuturesTest extends TestCase {
     } catch (ExecutionException e) {
       assertTrue(e.getCause() instanceof MyException);
       assertEquals("Nothing should be logged", 0,
-          combinedFutureLogHandler.getStoredLogRecords().size());
+          aggregateFutureLogHandler.getStoredLogRecords().size());
     }
   }
 
@@ -2599,14 +2726,13 @@ public class FuturesTest extends TestCase {
   /**
    * Non-Error exceptions are never logged.
    */
-  @GwtIncompatible("TestLogHandler")
   @SuppressWarnings("unchecked")
   public void testSuccessfulAsList_logging_exception() throws Exception {
     assertEquals(Lists.newArrayList((Object) null),
         Futures.successfulAsList(
             immediateFailedFuture(new MyException())).get());
     assertEquals("Nothing should be logged", 0,
-        combinedFutureLogHandler.getStoredLogRecords().size());
+        aggregateFutureLogHandler.getStoredLogRecords().size());
 
     // Not even if there are a bunch of failures.
     assertEquals(Lists.newArrayList(null, null, null),
@@ -2615,19 +2741,18 @@ public class FuturesTest extends TestCase {
             immediateFailedFuture(new MyException()),
             immediateFailedFuture(new MyException())).get());
     assertEquals("Nothing should be logged", 0,
-        combinedFutureLogHandler.getStoredLogRecords().size());
+        aggregateFutureLogHandler.getStoredLogRecords().size());
   }
 
   /**
    * Ensure that errors are always logged.
    */
-  @GwtIncompatible("TestLogHandler")
   @SuppressWarnings("unchecked")
   public void testSuccessfulAsList_logging_error() throws Exception {
     assertEquals(Lists.newArrayList((Object) null),
         Futures.successfulAsList(
             immediateFailedFuture(new MyError())).get());
-    List<LogRecord> logged = combinedFutureLogHandler.getStoredLogRecords();
+    List<LogRecord> logged = aggregateFutureLogHandler.getStoredLogRecords();
     assertEquals(1, logged.size());  // errors are always logged
     assertTrue(logged.get(0).getThrown() instanceof MyError);
   }
@@ -3078,7 +3203,7 @@ public class FuturesTest extends TestCase {
   public void testGetCheckedTimed_success()
       throws TwoArgConstructorException {
     assertEquals("foo", getChecked(
-        immediateFuture("foo"), 0, SECONDS, TwoArgConstructorException.class));
+        immediateFuture("foo"), TwoArgConstructorException.class, 0, SECONDS));
   }
 
   @GwtIncompatible("Futures.getChecked")
@@ -3086,7 +3211,7 @@ public class FuturesTest extends TestCase {
     SettableFuture<String> future = SettableFuture.create();
     Thread.currentThread().interrupt();
     try {
-      getChecked(future, 0, SECONDS, TwoArgConstructorException.class);
+      getChecked(future, TwoArgConstructorException.class, 0, SECONDS);
       fail();
     } catch (TwoArgConstructorException expected) {
       assertTrue(expected.getCause() instanceof InterruptedException);
@@ -3102,7 +3227,7 @@ public class FuturesTest extends TestCase {
     SettableFuture<String> future = SettableFuture.create();
     future.cancel(true);
     try {
-      getChecked(future, 0, SECONDS, TwoArgConstructorException.class);
+      getChecked(future, TwoArgConstructorException.class, 0, SECONDS);
       fail();
     } catch (CancellationException expected) {
     }
@@ -3111,8 +3236,8 @@ public class FuturesTest extends TestCase {
   @GwtIncompatible("Futures.getChecked")
   public void testGetCheckedTimed_ExecutionExceptionChecked() {
     try {
-      getChecked(FAILED_FUTURE_CHECKED_EXCEPTION, 0, SECONDS,
-          TwoArgConstructorException.class);
+      getChecked(FAILED_FUTURE_CHECKED_EXCEPTION, TwoArgConstructorException.class, 0,
+          SECONDS);
       fail();
     } catch (TwoArgConstructorException expected) {
       assertEquals(CHECKED_EXCEPTION, expected.getCause());
@@ -3123,8 +3248,8 @@ public class FuturesTest extends TestCase {
   public void testGetCheckedTimed_ExecutionExceptionUnchecked()
       throws TwoArgConstructorException {
     try {
-      getChecked(FAILED_FUTURE_UNCHECKED_EXCEPTION, 0, SECONDS,
-          TwoArgConstructorException.class);
+      getChecked(FAILED_FUTURE_UNCHECKED_EXCEPTION, TwoArgConstructorException.class, 0,
+          SECONDS);
       fail();
     } catch (UncheckedExecutionException expected) {
       assertEquals(UNCHECKED_EXCEPTION, expected.getCause());
@@ -3135,7 +3260,7 @@ public class FuturesTest extends TestCase {
   public void testGetCheckedTimed_ExecutionExceptionError()
       throws TwoArgConstructorException {
     try {
-      getChecked(FAILED_FUTURE_ERROR, 0, SECONDS, TwoArgConstructorException.class);
+      getChecked(FAILED_FUTURE_ERROR, TwoArgConstructorException.class, 0, SECONDS);
       fail();
     } catch (ExecutionError expected) {
       assertEquals(ERROR, expected.getCause());
@@ -3145,8 +3270,8 @@ public class FuturesTest extends TestCase {
   @GwtIncompatible("Futures.getChecked")
   public void testGetCheckedTimed_ExecutionExceptionOtherThrowable() {
     try {
-      getChecked(FAILED_FUTURE_OTHER_THROWABLE, 0, SECONDS,
-          TwoArgConstructorException.class);
+      getChecked(FAILED_FUTURE_OTHER_THROWABLE, TwoArgConstructorException.class, 0,
+          SECONDS);
       fail();
     } catch (TwoArgConstructorException expected) {
       assertEquals(OTHER_THROWABLE, expected.getCause());
@@ -3157,8 +3282,8 @@ public class FuturesTest extends TestCase {
   public void testGetCheckedTimed_RuntimeException()
       throws TwoArgConstructorException {
     try {
-      getChecked(RUNTIME_EXCEPTION_FUTURE, 0, SECONDS,
-          TwoArgConstructorException.class);
+      getChecked(RUNTIME_EXCEPTION_FUTURE, TwoArgConstructorException.class, 0,
+          SECONDS);
       fail();
     } catch (RuntimeException expected) {
       assertEquals(RUNTIME_EXCEPTION, expected);
@@ -3169,7 +3294,7 @@ public class FuturesTest extends TestCase {
   public void testGetCheckedTimed_TimeoutException() {
     SettableFuture<String> future = SettableFuture.create();
     try {
-      getChecked(future, 0, SECONDS, TwoArgConstructorException.class);
+      getChecked(future, TwoArgConstructorException.class, 0, SECONDS);
       fail();
     } catch (TwoArgConstructorException expected) {
       assertTrue(expected.getCause() instanceof TimeoutException);
@@ -3180,7 +3305,7 @@ public class FuturesTest extends TestCase {
   public void testGetCheckedTimed_badExceptionConstructor_wrapsOriginalChecked() throws Exception {
     try {
       getChecked(
-          FAILED_FUTURE_CHECKED_EXCEPTION, 1, TimeUnit.SECONDS, ExceptionWithBadConstructor.class);
+          FAILED_FUTURE_CHECKED_EXCEPTION, ExceptionWithBadConstructor.class, 1, TimeUnit.SECONDS);
       fail();
     } catch (IllegalArgumentException expected) {
       assertSame(CHECKED_EXCEPTION, expected.getCause());
@@ -3190,8 +3315,8 @@ public class FuturesTest extends TestCase {
   @GwtIncompatible("Futures.getChecked")
   public void testGetCheckedTimed_withGoodAndBadExceptionConstructor() throws Exception {
     try {
-      getChecked(FAILED_FUTURE_CHECKED_EXCEPTION, 1, TimeUnit.SECONDS,
-          ExceptionWithGoodAndBadConstructor.class);
+      getChecked(FAILED_FUTURE_CHECKED_EXCEPTION, ExceptionWithGoodAndBadConstructor.class, 1,
+          TimeUnit.SECONDS);
       fail();
     } catch (ExceptionWithGoodAndBadConstructor expected) {
       assertSame(CHECKED_EXCEPTION, expected.getCause());
@@ -3280,6 +3405,7 @@ public class FuturesTest extends TestCase {
   // Edge case tests of the exception-construction code through untimed get():
 
   @GwtIncompatible("Futures.getChecked")
+  @SuppressWarnings("FuturesGetCheckedIllegalExceptionType")
   public void testGetCheckedUntimed_exceptionClassIsRuntimeException() {
     try {
       getChecked(FAILED_FUTURE_CHECKED_EXCEPTION,
@@ -3300,6 +3426,7 @@ public class FuturesTest extends TestCase {
   }
 
   @GwtIncompatible("Futures.getChecked")
+  @SuppressWarnings("FuturesGetCheckedIllegalExceptionType")
   public void testGetCheckedUntimed_exceptionClassNoPublicConstructor()
       throws ExceptionWithPrivateConstructor {
     try {
@@ -3311,6 +3438,7 @@ public class FuturesTest extends TestCase {
   }
 
   @GwtIncompatible("Futures.getChecked")
+  @SuppressWarnings("FuturesGetCheckedIllegalExceptionType")
   public void testGetCheckedUntimed_exceptionClassPublicConstructorWrongType()
       throws ExceptionWithWrongTypesConstructor {
     try {

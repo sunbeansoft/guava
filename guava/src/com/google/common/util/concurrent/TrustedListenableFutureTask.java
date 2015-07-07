@@ -64,20 +64,20 @@ class TrustedListenableFutureTask<V> extends AbstractFuture.TrustedFuture<V>
     return new TrustedListenableFutureTask<V>(Executors.callable(runnable, result));
   }
 
-  private TrutestedFutureInterruptibleTask task;
+  private TrustedFutureInterruptibleTask task;
 
   TrustedListenableFutureTask(Callable<V> callable) {
-    this.task = new TrutestedFutureInterruptibleTask(callable);
+    this.task = new TrustedFutureInterruptibleTask(callable);
   }
 
   @Override public void run() {
-    TrutestedFutureInterruptibleTask localTask = task;
+    TrustedFutureInterruptibleTask localTask = task;
     if (localTask != null) {
       localTask.run();
     }
   }
 
-  @Override void done() {
+  @Override final void done() {
     super.done();
 
     // Free all resources associated with the running task
@@ -86,26 +86,16 @@ class TrustedListenableFutureTask<V> extends AbstractFuture.TrustedFuture<V>
 
   @GwtIncompatible("Interruption not supported")
   @Override protected final void interruptTask() {
-    TrutestedFutureInterruptibleTask localTask = task;
+    TrustedFutureInterruptibleTask localTask = task;
     if (localTask != null) {
       localTask.interruptTask();
     }
   }
 
-  /**
-   * Template method for calculating and setting the value. Guaranteed to be called at most once.
-   *
-   * <p>Extracted as an extension point for subclasses that wish to modify behavior.
-   * See Futures.combine (which has specialized exception handling).
-   */
-  void doRun(Callable<V> localTask) throws Exception {
-    set(localTask.call());
-  }
-
-  final class TrutestedFutureInterruptibleTask extends InterruptibleTask {
+  private final class TrustedFutureInterruptibleTask extends InterruptibleTask {
     private final Callable<V> callable;
 
-    TrutestedFutureInterruptibleTask(Callable<V> callable) {
+    TrustedFutureInterruptibleTask(Callable<V> callable) {
       this.callable = checkNotNull(callable);
     }
 
@@ -113,7 +103,7 @@ class TrustedListenableFutureTask<V> extends AbstractFuture.TrustedFuture<V>
       // Ensure we haven't been cancelled or already run.
       if (!isDone()) {
         try {
-          doRun(callable);
+          set(callable.call());
         } catch (Throwable t) {
           setException(t);
         } 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 The Guava Authors
+ * Copyright (C) 2015 The Guava Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,26 @@
  * limitations under the License.
  */
 
-package com.google.common.collect;
+package com.google.common.collect.testing.google;
 
-import java.util.Collections;
+import static junit.framework.Assert.fail;
+
+import com.google.common.annotations.GwtCompatible;
+import com.google.common.collect.Multimap;
 
 /**
- * GWT emulation of {@link EmptyImmutableSet}.
+ * Helper methods/assertions for use with {@code com.google.common.collect} types.
  *
- * @author Hayward Chan
+ * @author Colin Decker
  */
-final class EmptyImmutableSet extends ForwardingImmutableSet<Object> {
-  private EmptyImmutableSet() {
-    super(Collections.emptySet());
-  }
+@GwtCompatible
+final class GoogleHelpers {
 
-  static final EmptyImmutableSet INSTANCE = new EmptyImmutableSet();
+  private GoogleHelpers() {}
+
+  static void assertEmpty(Multimap<?, ?> multimap) {
+    if (!multimap.isEmpty()) {
+      fail("Not true that " + multimap + " is empty");
+    }
+  }
 }

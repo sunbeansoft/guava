@@ -23,6 +23,7 @@ import static java.util.concurrent.atomic.AtomicReferenceFieldUpdater.newUpdater
 import com.google.common.annotations.Beta;
 import com.google.common.annotations.GwtCompatible;
 import com.google.common.base.Throwables;
+import com.google.errorprone.annotations.ForOverride;
 
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
@@ -30,6 +31,7 @@ import java.security.PrivilegedExceptionAction;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
@@ -40,26 +42,19 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * An abstract implementation of the {@link ListenableFuture} interface. This
- * class is preferable to {@link java.util.concurrent.FutureTask} for two
- * reasons: It implements {@code ListenableFuture}, and it does not implement
- * {@code Runnable}. (If you want a {@code Runnable} implementation of {@code
- * ListenableFuture}, create a {@link ListenableFutureTask}, or submit your
- * tasks to a {@link ListeningExecutorService}.)
+ * An abstract implementation of {@link ListenableFuture}, intended for advanced users only. More
+ * common ways to create a {@code ListenableFuture} include instantiating a {@link SettableFuture},
+ * submitting a task to a {@link ListeningExecutorService}, and deriving a {@code Future} from an
+ * existing one, typically using methods like {@link Futures#transform(ListenableFuture, Function)
+ * Futures.transform} and {@link Futures#catching(ListenableFuture, Class, Function)
+ * Futures.catching}.
  *
- * <p>This class implements all methods in {@code ListenableFuture}.
- * Subclasses should provide a way to set the result of the computation through
- * the protected methods {@link #set(Object)},
- * {@link #setFuture(ListenableFuture)} and {@link #setException(Throwable)}.
- * Subclasses may also override {@link #interruptTask()}, which will be invoked
- * automatically if a call to {@link #cancel(boolean) cancel(true)} succeeds in
- * canceling the future.
- *
- * <p>Subclasses should rarely override other methods. Instead, prefer designs
- * that derive a new {@code Future} to return to clients, typically using
- * methods like {@link Futures#transform(ListenableFuture, AsyncFunction)
- * Futures.transform} and {@link Futures#withFallback(ListenableFuture,
- * FutureFallback) Futures.withFallback}.
+ * <p>This class implements all methods in {@code ListenableFuture}. Subclasses should provide a way
+ * to set the result of the computation through the protected methods {@link #set(Object)}, {@link
+ * #setFuture(ListenableFuture)} and {@link #setException(Throwable)}. Subclasses may also override
+ * {@link #interruptTask()}, which will be invoked automatically if a call to {@link
+ * #cancel(boolean) cancel(true)} succeeds in canceling the future. Subclasses should rarely
+ * override other methods.
  *
  * @author Sven Mawson
  * @author Luke Sandberg
@@ -769,7 +764,31 @@ public abstract class AbstractFuture<V> implements ListenableFuture<V> {
    *
    * <p>This is called exactly once, after all listeners have executed.  By default it does nothing.
    */
+  // TODO(cpovirk): @ForOverride if https://github.com/google/error-prone/issues/342 permits
   void done() {}
+
+  /**
+   * Returns the exception that this {@code Future} completed with. This includes completion through
+   * a call to {@link setException} or {@link setFuture}{@code (failedFuture)} but not cancellation.
+   *
+   * @throws RuntimeException if the {@code Future} has not failed
+   */
+  final Throwable trustedGetException() {
+    return ((Failure) value).exception;
+  }
+
+  /**
+   * If this future has been cancelled (and possibly interrupted), cancels (and possibly interrupts)
+   * the given future (if available).
+   *
+   * <p>This method should be used only when this future is completed. It is designed to be called
+   * from {@code done}.
+   */
+  final void maybePropagateCancellation(@Nullable Future<?> related) {
+    if (related != null & isCancelled()) {
+      related.cancel(wasInterrupted());
+    }
+  }
 
   /** Clears the {@link #waiters} list and returns the most recently added value. */
   private Waiter clearWaiters() {

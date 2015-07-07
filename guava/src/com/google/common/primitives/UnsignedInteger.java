@@ -35,7 +35,7 @@ import javax.annotation.Nullable;
  * treat primitive {@code int} values as unsigned, using the methods from {@link UnsignedInts}.
  *
  * <p>See the Guava User Guide article on <a href=
- * "http://code.google.com/p/guava-libraries/wiki/PrimitivesExplained#Unsigned_support">
+ * "https://github.com/google/guava/wiki/PrimitivesExplained#unsigned-support">
  * unsigned primitive utilities</a>.
  *
  * @author Louis Wasserman
@@ -76,8 +76,10 @@ public final class UnsignedInteger extends Number implements Comparable<Unsigned
    * if possible.  The inverse operation of {@link #longValue()}.
    */
   public static UnsignedInteger valueOf(long value) {
-    checkArgument((value & INT_MASK) == value,
-        "value (%s) is outside the range for an unsigned integer value", value);
+    checkArgument(
+        (value & INT_MASK) == value,
+        "value (%s) is outside the range for an unsigned integer value",
+        value);
     return fromIntBits((int) value);
   }
 
@@ -89,8 +91,10 @@ public final class UnsignedInteger extends Number implements Comparable<Unsigned
    */
   public static UnsignedInteger valueOf(BigInteger value) {
     checkNotNull(value);
-    checkArgument(value.signum() >= 0 && value.bitLength() <= Integer.SIZE,
-        "value (%s) is outside the range for an unsigned integer value", value);
+    checkArgument(
+        value.signum() >= 0 && value.bitLength() <= Integer.SIZE,
+        "value (%s) is outside the range for an unsigned integer value",
+        value);
     return fromIntBits(value.intValue());
   }
 

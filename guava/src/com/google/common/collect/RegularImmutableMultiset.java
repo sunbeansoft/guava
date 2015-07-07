@@ -20,6 +20,7 @@ import com.google.common.annotations.GwtCompatible;
 import com.google.common.base.Objects;
 import com.google.common.collect.Multisets.ImmutableEntry;
 import com.google.common.primitives.Ints;
+import com.google.j2objc.annotations.WeakOuter;
 
 import java.util.Collection;
 
@@ -34,13 +35,14 @@ import javax.annotation.Nullable;
 @GwtCompatible(serializable = true)
 @SuppressWarnings("serial") // uses writeReplace(), not default serialization
 class RegularImmutableMultiset<E> extends ImmutableMultiset<E> {
-  static final RegularImmutableMultiset<Object> EMPTY = 
+  static final RegularImmutableMultiset<Object> EMPTY =
       new RegularImmutableMultiset<Object>(ImmutableList.<Entry<Object>>of());
-  
+
   private final transient Multisets.ImmutableEntry<E>[] entries;
   private final transient Multisets.ImmutableEntry<E>[] hashTable;
   private final transient int size;
   private final transient int hashCode;
+
   private transient ImmutableSet<E> elementSet;
 
   RegularImmutableMultiset(Collection<? extends Entry<? extends E>> entries) {
@@ -137,25 +139,12 @@ class RegularImmutableMultiset<E> extends ImmutableMultiset<E> {
     return (result == null) ? elementSet = new ElementSet() : result;
   }
 
-  private final class ElementSet extends ImmutableSet<E> {
-    @Override
-    public UnmodifiableIterator<E> iterator() {
-      return asList().iterator();
-    }
+  @WeakOuter
+  private final class ElementSet extends ImmutableSet.Indexed<E> {
 
     @Override
-    ImmutableList<E> createAsList() {
-      return new ImmutableAsList<E>() {
-        @Override
-        public E get(int index) {
-          return entries[index].getElement();
-        }
-
-        @Override
-        ImmutableCollection<E> delegateCollection() {
-          return ElementSet.this;
-        }
-      };
+    E get(int index) {
+      return entries[index].getElement();
     }
 
     @Override

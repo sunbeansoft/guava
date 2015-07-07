@@ -43,7 +43,7 @@ public abstract class ImmutableSet<E> extends ImmutableCollection<E> implements 
   // Casting to any type is safe because the set will never hold any elements.
   @SuppressWarnings({"unchecked"})
   public static <E> ImmutableSet<E> of() {
-    return (ImmutableSet<E>) EmptyImmutableSet.INSTANCE;
+    return (ImmutableSet<E>) RegularImmutableSet.EMPTY;
   }
 
   public static <E> ImmutableSet<E> of(E element) {
@@ -161,6 +161,30 @@ public abstract class ImmutableSet<E> extends ImmutableCollection<E> implements 
 
   @Override public int hashCode() {
     return Sets.hashCodeImpl(this);
+  }
+  
+  abstract static class Indexed<E> extends ImmutableSet<E> {
+    abstract E get(int index);
+
+    @Override
+    public UnmodifiableIterator<E> iterator() {
+      return asList().iterator();
+    }
+
+    @Override
+    ImmutableList<E> createAsList() {
+      return new ImmutableAsList<E>() {
+        @Override
+        public E get(int index) {
+          return Indexed.this.get(index);
+        }
+
+        @Override
+        Indexed<E> delegateCollection() {
+          return Indexed.this;
+        }
+      };
+    }
   }
 
   public static <E> Builder<E> builder() {

@@ -22,6 +22,8 @@ import static com.google.common.collect.Maps.newTreeMap;
 import static java.util.Collections.singletonMap;
 import static java.util.Collections.unmodifiableSortedMap;
 
+import com.google.common.collect.ImmutableSortedMap.Builder;
+
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
@@ -33,7 +35,7 @@ import java.util.SortedMap;
  *
  * @author Hayward Chan
  */
-public abstract class ImmutableSortedMap<K, V>
+public final class ImmutableSortedMap<K, V>
     extends ForwardingImmutableMap<K, V> implements SortedMap<K, V> {
 
   @SuppressWarnings("unchecked")
@@ -64,7 +66,7 @@ public abstract class ImmutableSortedMap<K, V>
   // Casting to any type is safe because the set will never hold any elements.
   @SuppressWarnings("unchecked")
   public static <K, V> ImmutableSortedMap<K, V> of() {
-    return EmptyImmutableSortedMap.forComparator(NATURAL_ORDER);
+    return new Builder<K, V>(NATURAL_ORDER).build();
   }
 
   public static <K extends Comparable<? super K>, V> ImmutableSortedMap<K, V>
@@ -208,6 +210,11 @@ public abstract class ImmutableSortedMap<K, V>
       }
       return this;
     }
+    
+    @Override
+    public Builder<K, V> orderEntriesByValue(Comparator<? super V> valueComparator) {
+      throw new UnsupportedOperationException("Not available on ImmutableSortedMap.Builder");
+    }
 
     @Override public ImmutableSortedMap<K, V> build() {
       SortedMap<K, V> delegate = newModifiableDelegate(comparator);
@@ -299,7 +306,7 @@ public abstract class ImmutableSortedMap<K, V>
     if (!inclusive) {
       fromKey = higher(fromKey);
       if (fromKey == null) {
-        return EmptyImmutableSortedMap.forComparator(comparator());
+        return new Builder<K, V>(this.comparator).build();
       }
     }
     return tailMap(fromKey);
@@ -311,10 +318,7 @@ public abstract class ImmutableSortedMap<K, V>
 
   private static <K, V> ImmutableSortedMap<K, V> newView(
       SortedMap<K, V> delegate, Comparator<? super K> comparator) {
-    if (delegate.isEmpty()) {
-      return EmptyImmutableSortedMap.forComparator(comparator);
-    }
-    return new RegularImmutableSortedMap<K, V>(delegate, comparator);
+    return new ImmutableSortedMap<K, V>(delegate, comparator);
   }
 
   /*

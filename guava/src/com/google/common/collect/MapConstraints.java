@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.Beta;
 import com.google.common.annotations.GwtCompatible;
+import com.google.j2objc.annotations.WeakOuter;
 
 import java.io.Serializable;
 import java.util.Collection;
@@ -40,9 +41,15 @@ import javax.annotation.Nullable;
  * @see Constraints
  * @author Mike Bostock
  * @since 3.0
+ * @deprecated Use {@link Preconditions} for basic checks. In place of
+ *     constrained maps, we encourage you to check your preconditions
+ *     explicitly instead of leaving that work to the map implementation.
+ *     For the specific case of rejecting null, consider {@link ImmutableMap}.
+ *     This class is scheduled for removal in Guava 20.0.
  */
 @Beta
 @GwtCompatible
+@Deprecated
 public final class MapConstraints {
   private MapConstraints() {}
 
@@ -399,7 +406,9 @@ public final class MapConstraints {
       extends ForwardingMultimap<K, V> implements Serializable {
     final MapConstraint<? super K, ? super V> constraint;
     final Multimap<K, V> delegate;
+
     transient Collection<Entry<K, V>> entries;
+
     transient Map<K, Collection<V>> asMap;
 
     public ConstrainedMultimap(Multimap<K, V> delegate,
@@ -417,7 +426,8 @@ public final class MapConstraints {
       if (result == null) {
         final Map<K, Collection<V>> asMapDelegate = delegate.asMap();
 
-        asMap = result = new ForwardingMap<K, Collection<V>>() {
+        @WeakOuter
+        class AsMap extends ForwardingMap<K, Collection<V>> {
           Set<Entry<K, Collection<V>>> entrySet;
           Collection<Collection<V>> values;
 
@@ -456,7 +466,8 @@ public final class MapConstraints {
           @Override public boolean containsValue(Object o) {
             return values().contains(o);
           }
-        };
+        }
+        asMap = result = new AsMap();
       }
       return result;
     }

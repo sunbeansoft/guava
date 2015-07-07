@@ -44,7 +44,6 @@ import java.util.Map;
  * @author Ben Yu
  */
 public class TypesTest extends TestCase {
-
   public void testNewParameterizedType_ownerTypeImplied() throws Exception {
     ParameterizedType jvmType = (ParameterizedType)
         new TypeCapture<Map.Entry<String, Integer>>() {}.capture();

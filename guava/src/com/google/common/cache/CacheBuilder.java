@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.annotations.Beta;
 import com.google.common.annotations.GwtCompatible;
 import com.google.common.annotations.GwtIncompatible;
 import com.google.common.base.Ascii;
@@ -140,7 +139,7 @@ import javax.annotation.CheckReturnValue;
  * <i>not</i> include cache contents, but only configuration.
  *
  * <p>See the Guava User Guide article on <a href=
- * "http://code.google.com/p/guava-libraries/wiki/CachesExplained">caching</a> for a higher-level
+ * "https://github.com/google/guava/wiki/CachesExplained">caching</a> for a higher-level
  * explanation.
  *
  * @param <K> the base key type for all caches created by this builder
@@ -254,7 +253,6 @@ public final class CacheBuilder<K, V> {
    *
    * @since 12.0
    */
-  @Beta
   @GwtIncompatible("To be supported")
   public static CacheBuilder<Object, Object> from(CacheBuilderSpec spec) {
     return spec.toCacheBuilder()
@@ -268,7 +266,6 @@ public final class CacheBuilder<K, V> {
    * @param spec a String in the format specified by {@link CacheBuilderSpec}
    * @since 12.0
    */
-  @Beta
   @GwtIncompatible("To be supported")
   public static CacheBuilder<Object, Object> from(String spec) {
     return from(CacheBuilderSpec.parse(spec));
@@ -675,7 +672,6 @@ public final class CacheBuilder<K, V> {
    * @throws IllegalStateException if the refresh interval was already set
    * @since 11.0
    */
-  @Beta
   @GwtIncompatible("To be supported (synchronously).")
   public CacheBuilder<K, V> refreshAfterWrite(long duration, TimeUnit unit) {
     checkNotNull(unit);

@@ -14,18 +14,15 @@
  * limitations under the License.
  */
 
-package com.google.common.collect;
+package com.google.common.testing;
 
-import java.util.Comparator;
-import java.util.SortedMap;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
- * GWT emulated version of {@link RegularImmutableSortedMap}.
- *
- * @author Chris Povirk
+ * Marks an element as incompatible with j2objc transpiler.
  */
-final class RegularImmutableSortedMap<K, V> extends ImmutableSortedMap<K, V> {
-  RegularImmutableSortedMap(SortedMap<K, V> delegate, Comparator<? super K> comparator) {
-    super(delegate, comparator);
-  }
+@Retention(RetentionPolicy.SOURCE)
+@interface J2ObjCIncompatible {
+  String value();
 }

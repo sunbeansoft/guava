@@ -99,7 +99,7 @@ import javax.annotation.Nullable;
  * @author Bob Lee
  * @author Charles Fry
  * @author Kevin Bourrillion
- * @since 2.0 (imported from Google Collections Library)
+ * @since 2.0
  */
 @GwtCompatible(emulated = true)
 public final class MapMaker extends GenericMapMaker<Object, Object> {
@@ -572,7 +572,7 @@ public final class MapMaker extends GenericMapMaker<Object, Object> {
    * @deprecated Caching functionality in {@code MapMaker} has been moved to
    *     {@link com.google.common.cache.CacheBuilder}, with {@link #makeComputingMap} being replaced
    *     by {@link com.google.common.cache.CacheBuilder#build}. See the
-   *     <a href="http://code.google.com/p/guava-libraries/wiki/MapMakerMigration">MapMaker
+   *     <a href="https://github.com/google/guava/wiki/MapMakerMigration">MapMaker
    *     Migration Guide</a> for more details.
    */
   @Deprecated

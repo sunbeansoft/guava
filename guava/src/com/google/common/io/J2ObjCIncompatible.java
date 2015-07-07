@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 The Guava Authors
+ * Copyright (C) 2015 The Guava Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,15 @@
  * limitations under the License.
  */
 
-package com.google.common.collect;
+package com.google.common.io;
 
-import java.util.Comparator;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
- * GWT emulation of {@link EmptyImmutableSortedSet}.
- *
- * @author Hayward Chan
+ * Marks an element as incompatible with j2objc transpiler.
  */
-class EmptyImmutableSortedSet<E> extends ImmutableSortedSet<E> {
-  EmptyImmutableSortedSet(Comparator<? super E> comparator) {
-    super(Sets.newTreeSet(comparator));
-  }
+@Retention(RetentionPolicy.SOURCE)
+@interface J2ObjCIncompatible {
+  String value();
 }

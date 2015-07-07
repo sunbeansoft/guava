@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 The Guava Authors
+ * Copyright (C) 2015 The Guava Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,15 @@
  * limitations under the License.
  */
 
-package com.google.common.collect;
+package com.google.common.reflect;
 
-import java.util.Collections;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
- * GWT emulation of {@link EmptyImmutableBiMap}.
- *
- * @author Hayward Chan
+ * Marks an element as incompatible with j2objc transpiler.
  */
-@SuppressWarnings("serial")
-final class EmptyImmutableBiMap extends ImmutableBiMap<Object, Object> {
-  static final EmptyImmutableBiMap INSTANCE = new EmptyImmutableBiMap();
-
-  private EmptyImmutableBiMap() {
-    super(Collections.emptyMap());
-  }
-  @Override public ImmutableBiMap<Object, Object> inverse() {
-    return this;
-  }
+@Retention(RetentionPolicy.SOURCE)
+@interface J2ObjCIncompatible {
+  String value();
 }
